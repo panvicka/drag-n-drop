@@ -1,3 +1,56 @@
+// add validation logic
+interface Validatable {
+  value: string | number;
+  required?: boolean; // ? add an option to be undefined as value (not mandatory)
+  minLenght?: number; // instead of ? we can add number | undefined as well
+  maxLenght?: number;
+  minValue?: number;
+  maxValue?: number;
+}
+
+// get object with the Validatable structure
+function validate(validateInput: Validatable) {
+  let isValid = true;
+
+  // required check is needed
+  if (validateInput.required) {
+    // if one of those 2 is false than the isValid will be false
+    isValid = isValid && validateInput.value.toString().trim().length !== 0;
+  }
+
+  if (
+    validateInput.minLenght != null &&
+    typeof validateInput.value === "string"
+  ) {
+    isValid =
+      isValid && validateInput.value.trim().length > validateInput.minLenght;
+  }
+
+  if (
+    validateInput.maxLenght != null &&
+    typeof validateInput.value === "string"
+  ) {
+    isValid =
+      isValid && validateInput.value.trim().length < validateInput.maxLenght;
+  }
+
+  if (
+    validateInput.minValue != null &&
+    typeof validateInput.value === "number"
+  ) {
+    isValid = isValid && validateInput.value > validateInput.minValue;
+  }
+
+  if (
+    validateInput.maxValue != null &&
+    typeof validateInput.value === "number"
+  ) {
+    isValid = isValid && validateInput.value < validateInput.maxValue;
+  }
+
+  return isValid;
+}
+
 // auto-bind decorator
 // method decorated that is automatically binding this to the correct this
 function AutoBind(_: any, _2: string, descriptor: PropertyDescriptor) {
@@ -73,10 +126,28 @@ class ProjectInput {
     const enteredDesc = this.descriptionInputElement.value;
     const enteredPeople = this.peopleInputElement.value;
 
+    const titleValidatable: Validatable = {
+      value: enteredTitle,
+      required: true,
+    };
+
+    const descValidatable: Validatable = {
+      value: enteredDesc,
+      required: true,
+      minLenght: 5,
+    };
+
+    const peopleValidatable: Validatable = {
+      value: +enteredPeople,
+      required: true,
+      minValue: 1,
+      maxValue: 5,
+    };
+
     if (
-      enteredTitle.trim().length === 0 ||
-      enteredDesc.trim().length === 0 ||
-      enteredPeople.trim().length === 0
+      !validate(titleValidatable) ||
+      !validate(descValidatable) ||
+      !validate(peopleValidatable)
     ) {
       alert("Invalid input");
       return;

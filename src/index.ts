@@ -1,3 +1,72 @@
+// enum project state
+enum ProjectStatus {
+  Active,
+  Finished,
+}
+
+// project type
+class Project {
+  constructor(
+    public id: string,
+    public title: string,
+    public description: string,
+    public people: number,
+    public status: ProjectStatus
+  ) {}
+}
+
+//custom type for listeners 
+type Listener = (items: Project[]) => void;
+
+
+// save state of the app like it is done in React or Angular to react to changes
+// Project state management class
+class ProjectState {
+  // subscription pattern
+  private listeners: Listener[] = [];
+
+  // list of projects
+  private projects: Project[] = [];
+  private static instance: ProjectState;
+
+  //make this singleton
+  private constructor() {}
+
+  static getInstance() {
+    if (this.instance) {
+      return this.instance;
+    } else {
+      this.instance = new ProjectState();
+      return this.instance;
+    }
+  }
+
+  addListener(listenerFce: Listener) {
+    this.listeners.push(listenerFce);
+  }
+
+  addProject(title: string, description: string, numOfPeople: number) {
+    const newProject = new Project(
+      Math.random().toString(),
+      title,
+      description,
+      numOfPeople,
+      ProjectStatus.Active
+    );
+
+    this.projects.push(newProject);
+
+    //if something changes loop thru all listeners and execute them
+    for (const listenerFn of this.listeners) {
+      // slice to make a copy of the array not the original array so
+      // we can edit it without breaking stuff
+      listenerFn(this.projects.slice());
+    }
+  }
+}
+
+const projectState = ProjectState.getInstance();
+
 // add validation logic
 interface Validatable {
   value: string | number;
@@ -69,6 +138,72 @@ function AutoBind(_: any, _2: string, descriptor: PropertyDescriptor) {
   return adjDescriptor;
 }
 
+//class for rendering project list
+class ProjectList {
+  templateElement: HTMLTemplateElement;
+  hostElement: HTMLDivElement;
+  element: HTMLElement; // actually section element but that doesnt exists
+
+  assignedProjects: Project[];
+
+  constructor(private type: "active" | "finished") {
+    this.assignedProjects = [];
+
+    // has reference tu stuff I would like to render
+    this.templateElement = <HTMLTemplateElement>(
+      document.getElementById("project-list")!
+    );
+
+    // hold reference to where I want to render template element
+    // app div
+    this.hostElement = <HTMLDivElement>document.getElementById("app")!;
+
+    // render the HTML form right in the constructor
+    // import note, get the HTML content of the first parameter
+    const importedNode = document.importNode(
+      this.templateElement.content,
+      true
+    );
+
+    // insert node is document fragmentm, we need access to HTML element
+    this.element = <HTMLElement>importedNode.firstElementChild;
+    this.element.id = `${this.type}-projects`;
+
+    //add event listener
+    projectState.addListener((projects: Project[]) => {
+      this.assignedProjects = projects;
+      this.renderProjects();
+    });
+
+    this.attach();
+    this.renderContent();
+  }
+
+  private renderProjects() {
+    const listEl = <HTMLUListElement>(
+      document.getElementById(`${this.type}-projects-list`)!
+    );
+    for (const projectItem of this.assignedProjects) {
+      const listItem = document.createElement("li");
+      listItem.textContent = projectItem.title;
+      listEl.appendChild(listItem);
+    }
+  }
+
+  //fill empty spaces in template
+  private renderContent() {
+    const listId = `${this.type}-projects-list`;
+    this.element.querySelector("ul")!.id = listId;
+    this.element.querySelector("h2")!.textContent =
+      this.type.toUpperCase() + "PROJECTS";
+  }
+
+  private attach() {
+    this.hostElement.insertAdjacentElement("beforeend", this.element);
+  }
+}
+
+// class for rendering input forms
 class ProjectInput {
   templateElement: HTMLTemplateElement;
   hostElement: HTMLDivElement;
@@ -164,6 +299,7 @@ class ProjectInput {
     // runtime vanilla JS check if userInput is tuple (array in vanila JS)
     if (Array.isArray(userInput)) {
       const [title, desc, people] = userInput;
+      projectState.addProject(title, desc, people);
       console.log(title, desc, people);
     } else {
       console.log("error in input data");
@@ -181,3 +317,5 @@ class ProjectInput {
 }
 
 const prjInput = new ProjectInput();
+const activeProjectList = new ProjectList("active");
+const finishedProjectList = new ProjectList("finished");

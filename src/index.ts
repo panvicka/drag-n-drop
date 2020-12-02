@@ -15,9 +15,8 @@ class Project {
   ) {}
 }
 
-//custom type for listeners 
+//custom type for listeners
 type Listener = (items: Project[]) => void;
-
 
 // save state of the app like it is done in React or Angular to react to changes
 // Project state management class
@@ -171,7 +170,15 @@ class ProjectList {
 
     //add event listener
     projectState.addListener((projects: Project[]) => {
-      this.assignedProjects = projects;
+      const relevantProjects = projects.filter((prj) => {
+        if (this.type === 'active') {
+         return prj.status === ProjectStatus.Active;
+        } 
+        return prj.status === ProjectStatus.Finished;
+       
+      });
+
+      this.assignedProjects = relevantProjects;
       this.renderProjects();
     });
 
@@ -183,6 +190,7 @@ class ProjectList {
     const listEl = <HTMLUListElement>(
       document.getElementById(`${this.type}-projects-list`)!
     );
+    listEl.innerHTML='';
     for (const projectItem of this.assignedProjects) {
       const listItem = document.createElement("li");
       listItem.textContent = projectItem.title;

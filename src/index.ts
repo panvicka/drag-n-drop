@@ -16,20 +16,29 @@ class Project {
 }
 
 //custom type for listeners
-type Listener = (items: Project[]) => void;
+type Listener<T> = (items: T[]) => void;
+
+class State<T> {
+  // subscription pattern
+  // protected - cant be accesed from outside of the class but the classses that inherits can access it
+  protected listeners: Listener<T>[] = [];
+
+  addListener(listenerFce: Listener<T>) {
+    this.listeners.push(listenerFce);
+  }
+}
 
 // save state of the app like it is done in React or Angular to react to changes
 // Project state management class
-class ProjectState {
-  // subscription pattern
-  private listeners: Listener[] = [];
-
+class ProjectState extends State<Project> {
   // list of projects
   private projects: Project[] = [];
   private static instance: ProjectState;
 
   //make this singleton
-  private constructor() {}
+  private constructor() {
+    super();
+  }
 
   static getInstance() {
     if (this.instance) {
@@ -38,10 +47,6 @@ class ProjectState {
       this.instance = new ProjectState();
       return this.instance;
     }
-  }
-
-  addListener(listenerFce: Listener) {
-    this.listeners.push(listenerFce);
   }
 
   addProject(title: string, description: string, numOfPeople: number) {
@@ -137,25 +142,31 @@ function AutoBind(_: any, _2: string, descriptor: PropertyDescriptor) {
   return adjDescriptor;
 }
 
-//class for rendering project list
-class ProjectList {
+// componen base class
+// just like in react etc, every component is a renderable object
+// so we need some references to divs and render function
+
+// make generic class beciase hostElement and element can be all kind of stuff and
+// forcing all to HTMLElement will loose the type control!
+abstract class Component<T extends HTMLElement, U extends HTMLElement> {
   templateElement: HTMLTemplateElement;
-  hostElement: HTMLDivElement;
-  element: HTMLElement; // actually section element but that doesnt exists
+  hostElement: T;
+  element: U;
 
-  assignedProjects: Project[];
-
-  constructor(private type: "active" | "finished") {
-    this.assignedProjects = [];
-
+  constructor(
+    templateId: string,
+    hostElementId: string,
+    insertAtStart: boolean,
+    newElementId?: string
+  ) {
     // has reference tu stuff I would like to render
     this.templateElement = <HTMLTemplateElement>(
-      document.getElementById("project-list")!
+      document.getElementById(templateId)!
     );
 
     // hold reference to where I want to render template element
     // app div
-    this.hostElement = <HTMLDivElement>document.getElementById("app")!;
+    this.hostElement = <T>document.getElementById(hostElementId)!;
 
     // render the HTML form right in the constructor
     // import note, get the HTML content of the first parameter
@@ -165,83 +176,106 @@ class ProjectList {
     );
 
     // insert node is document fragmentm, we need access to HTML element
-    this.element = <HTMLElement>importedNode.firstElementChild;
-    this.element.id = `${this.type}-projects`;
+    this.element = <U>importedNode.firstElementChild;
 
-    //add event listener
-    projectState.addListener((projects: Project[]) => {
-      const relevantProjects = projects.filter((prj) => {
-        if (this.type === 'active') {
-         return prj.status === ProjectStatus.Active;
-        } 
-        return prj.status === ProjectStatus.Finished;
-       
-      });
+    if (newElementId) {
+      this.element.id = newElementId;
+    }
 
-      this.assignedProjects = relevantProjects;
-      this.renderProjects();
-    });
+    this.attach(insertAtStart);
+  }
 
-    this.attach();
+  private attach(insertAtStart: boolean) {
+    this.hostElement.insertAdjacentElement(
+      insertAtStart ? "afterbegin" : "beforeend",
+      this.element
+    );
+  }
+
+  abstract configure(): void;
+  abstract renderContent(): void;
+}
+
+//class for rendering individual Project items
+// T - Target element - where do I generate my projects to? To ul list
+// U - What are my generated elements? This time items in li
+class ProjectItem extends Component<HTMLUListElement, HTMLLIElement> {
+  private project: Project;
+
+  constructor(hostId: string, project: Project) {
+    super("single-project", hostId, false, project.id);
+    this.project = project;
+
+    this.configure();
     this.renderContent();
   }
 
-  private renderProjects() {
-    const listEl = <HTMLUListElement>(
-      document.getElementById(`${this.type}-projects-list`)!
-    );
-    listEl.innerHTML='';
-    for (const projectItem of this.assignedProjects) {
-      const listItem = document.createElement("li");
-      listItem.textContent = projectItem.title;
-      listEl.appendChild(listItem);
-    }
+  configure() {}
+
+  renderContent() {
+    this.element.querySelector("h2")!.textContent = this.project.title;
+    this.element.querySelector(
+      "h3"
+    )!.textContent = this.project.people.toString();
+    this.element.querySelector("p")!.textContent = this.project.description;
+  }
+}
+
+//class for rendering project list
+class ProjectList extends Component<HTMLDivElement, HTMLElement> {
+  assignedProjects: Project[];
+
+  constructor(private type: "active" | "finished") {
+    super("project-list", "app", false, `${type}-projects`);
+
+    this.assignedProjects = [];
+    this.configure();
+    this.renderContent();
   }
 
-  //fill empty spaces in template
-  private renderContent() {
+  renderContent() {
     const listId = `${this.type}-projects-list`;
     this.element.querySelector("ul")!.id = listId;
     this.element.querySelector("h2")!.textContent =
       this.type.toUpperCase() + "PROJECTS";
   }
 
-  private attach() {
-    this.hostElement.insertAdjacentElement("beforeend", this.element);
+  configure() {
+    //add event listener
+    projectState.addListener((projects: Project[]) => {
+      const relevantProjects = projects.filter((prj) => {
+        if (this.type === "active") {
+          return prj.status === ProjectStatus.Active;
+        }
+        return prj.status === ProjectStatus.Finished;
+      });
+
+      this.assignedProjects = relevantProjects;
+      this.renderProjects();
+    });
   }
+
+  private renderProjects() {
+    const listEl = <HTMLUListElement>(
+      document.getElementById(`${this.type}-projects-list`)!
+    );
+    listEl.innerHTML = "";
+    for (const projectItem of this.assignedProjects) {
+      new ProjectItem(this.element.querySelector('ul')!.id, projectItem);
+     }
+  }
+
+  //fill empty spaces in template
 }
 
 // class for rendering input forms
-class ProjectInput {
-  templateElement: HTMLTemplateElement;
-  hostElement: HTMLDivElement;
-  element: HTMLFontElement;
-
+class ProjectInput extends Component<HTMLDivElement, HTMLFontElement> {
   titleInputElement: HTMLInputElement;
   descriptionInputElement: HTMLInputElement;
   peopleInputElement: HTMLInputElement;
 
   constructor() {
-    // has reference tu stuff I would like to render
-    // this time project input template
-    this.templateElement = <HTMLTemplateElement>(
-      document.getElementById("project-input")!
-    );
-
-    // hold reference to where I want to render template element
-    // app div
-    this.hostElement = <HTMLDivElement>document.getElementById("app")!;
-
-    // render the HTML form right in the constructor
-    // import note, get the HTML content of the first parameter
-    const importedNode = document.importNode(
-      this.templateElement.content,
-      true
-    );
-
-    // insert node is document fragmentm, we need access to HTML element
-    this.element = <HTMLFontElement>importedNode.firstElementChild;
-    this.element.id = "user-input";
+    super("project-input", "app", true, "user-input");
 
     //grab all input elements
     this.titleInputElement = <HTMLInputElement>(
@@ -255,8 +289,14 @@ class ProjectInput {
     );
 
     this.configure();
-    this.attach();
   }
+
+  configure() {
+    //set up event listener
+    this.element.addEventListener("submit", this.submitHandler);
+  }
+
+  renderContent() {}
 
   private cleanInputs() {
     this.titleInputElement.value = "";
@@ -312,15 +352,6 @@ class ProjectInput {
     } else {
       console.log("error in input data");
     }
-  }
-
-  private configure() {
-    //set up event listener
-    this.element.addEventListener("submit", this.submitHandler);
-  }
-
-  private attach() {
-    this.hostElement.insertAdjacentElement("afterbegin", this.element);
   }
 }
 

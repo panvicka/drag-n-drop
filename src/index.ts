@@ -1,3 +1,18 @@
+// drag-n-drop interfaces
+
+// for items that can be dragged
+interface Draggable {
+  dragStartHandler(event: DragEvent): void;
+  dragEndHandler(event: DragEvent): void;
+}
+
+// for elements at which something can be dropped to
+interface DragTarget {
+  dragOverHandler(event: DragEvent): void;
+  dropHandler(event: DragEvent): void;
+  dragLeaveHandler(event: DragEvent): void;
+}
+
 // enum project state
 enum ProjectStatus {
   Active,
@@ -59,7 +74,22 @@ class ProjectState extends State<Project> {
     );
 
     this.projects.push(newProject);
+    this.updateListener();
+  }
 
+  moveProject(projectId: string, newStatus: ProjectStatus) {
+    const projectToChange = this.projects.find(
+      (project) => project.id === projectId
+    );
+    // check if project exists and if the status has changes so we do not rerender 
+    // the page if the project was not moved 
+    if (projectToChange && projectToChange.status !== newStatus) {
+      projectToChange.status = newStatus;
+      this.updateListener();
+    }
+  }
+
+  private updateListener() {
     //if something changes loop thru all listeners and execute them
     for (const listenerFn of this.listeners) {
       // slice to make a copy of the array not the original array so
@@ -111,14 +141,14 @@ function validate(validateInput: Validatable) {
     validateInput.minValue != null &&
     typeof validateInput.value === "number"
   ) {
-    isValid = isValid && validateInput.value > validateInput.minValue;
+    isValid = isValid && validateInput.value >= validateInput.minValue;
   }
 
   if (
     validateInput.maxValue != null &&
     typeof validateInput.value === "number"
   ) {
-    isValid = isValid && validateInput.value < validateInput.maxValue;
+    isValid = isValid && validateInput.value <= validateInput.maxValue;
   }
 
   return isValid;
@@ -199,8 +229,18 @@ abstract class Component<T extends HTMLElement, U extends HTMLElement> {
 //class for rendering individual Project items
 // T - Target element - where do I generate my projects to? To ul list
 // U - What are my generated elements? This time items in li
-class ProjectItem extends Component<HTMLUListElement, HTMLLIElement> {
+class ProjectItem
+  extends Component<HTMLUListElement, HTMLLIElement>
+  implements Draggable {
   private project: Project;
+
+  get persons() {
+    if (this.project.people == 1) {
+      return "1 person";
+    } else {
+      return `${this.project.people} persons`;
+    }
+  }
 
   constructor(hostId: string, project: Project) {
     super("single-project", hostId, false, project.id);
@@ -210,19 +250,39 @@ class ProjectItem extends Component<HTMLUListElement, HTMLLIElement> {
     this.renderContent();
   }
 
-  configure() {}
+  configure() {
+    this.element.addEventListener("dragstart", this.dragStartHandler);
+    this.element.addEventListener("dragend", this.dragEndHandler);
+  }
 
   renderContent() {
     this.element.querySelector("h2")!.textContent = this.project.title;
-    this.element.querySelector(
-      "h3"
-    )!.textContent = this.project.people.toString();
+    this.element.querySelector("h3")!.textContent = this.persons + " assigned";
     this.element.querySelector("p")!.textContent = this.project.description;
+  }
+
+  //forced by the droggable interafce
+  @AutoBind
+  dragStartHandler(event: DragEvent) {
+    event.dataTransfer!.setData("text/plain", this.project.id);
+
+    // this sets how the cursor will look like
+    // also tells the browser that we want to move stuff (will be removed from original place)
+    // alternative would be copy
+    event.dataTransfer!.effectAllowed = "move";
+
+    console.log(event);
+  }
+
+  dragEndHandler(_: DragEvent) {
+    console.log("dragend");
   }
 }
 
 //class for rendering project list
-class ProjectList extends Component<HTMLDivElement, HTMLElement> {
+class ProjectList
+  extends Component<HTMLDivElement, HTMLElement>
+  implements DragTarget {
   assignedProjects: Project[];
 
   constructor(private type: "active" | "finished") {
@@ -253,6 +313,10 @@ class ProjectList extends Component<HTMLDivElement, HTMLElement> {
       this.assignedProjects = relevantProjects;
       this.renderProjects();
     });
+
+    this.element.addEventListener("dragover", this.dragOverHandler);
+    this.element.addEventListener("dragleave", this.dragLeaveHandler);
+    this.element.addEventListener("drop", this.dropHandler);
   }
 
   private renderProjects() {
@@ -261,11 +325,33 @@ class ProjectList extends Component<HTMLDivElement, HTMLElement> {
     );
     listEl.innerHTML = "";
     for (const projectItem of this.assignedProjects) {
-      new ProjectItem(this.element.querySelector('ul')!.id, projectItem);
-     }
+      new ProjectItem(this.element.querySelector("ul")!.id, projectItem);
+    }
   }
 
-  //fill empty spaces in template
+  @AutoBind
+  dragOverHandler(event: DragEvent) {
+    // first check if whatever i am holding is droppable here
+    if (event.dataTransfer && event.dataTransfer.types[0] === "text/plain") {
+      event.preventDefault();
+      const listEl = this.element.querySelector("ul")!;
+      listEl.classList.add("droppable");
+    }
+  }
+  @AutoBind
+  dragLeaveHandler(event: DragEvent) {
+    const listEl = this.element.querySelector("ul")!;
+    listEl.classList.remove("droppable");
+  }
+
+  @AutoBind
+  dropHandler(event: DragEvent) {
+    const projectId = event.dataTransfer!.getData("text/plain");
+    projectState.moveProject(
+      projectId,
+      this.type === "active" ? ProjectStatus.Active : ProjectStatus.Finished
+    );
+  }
 }
 
 // class for rendering input forms
@@ -323,7 +409,7 @@ class ProjectInput extends Component<HTMLDivElement, HTMLFontElement> {
     const peopleValidatable: Validatable = {
       value: +enteredPeople,
       required: true,
-      minValue: 1,
+      minValue: 0,
       maxValue: 5,
     };
 

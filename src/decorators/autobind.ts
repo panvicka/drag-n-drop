@@ -1,4 +1,3 @@
-namespace App {
   // auto-bind decorator
   // method decorated that is automatically binding this to the correct this
   export function AutoBind(_: any, _2: string, descriptor: PropertyDescriptor) {
@@ -16,4 +15,4 @@ namespace App {
     };
     return adjDescriptor;
   }
-}
+

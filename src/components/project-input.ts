@@ -1,9 +1,9 @@
-import { Component } from "./base-component.js";
+import { Component } from "./base-component";
 // bundling imports to prevent name clash 
-import * as Validation from "../util/validation.js";
+import * as Validation from "../util/validation";
 // rename on import if you dont like the original name 
-import { AutoBind as Autobind } from "../decorators/autobind.js";
-import { projectState } from "../state/project-state.js";
+import { AutoBind as Autobind } from "../decorators/autobind";
+import { projectState } from "../state/project-state";
 
 // class for rendering input forms
 export class ProjectInput extends Component<HTMLDivElement, HTMLFontElement> {
